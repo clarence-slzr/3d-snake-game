@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>🐍 3D Snake Game</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <!-- HUD -->
+    <div class="hud">
+        <div class="hud-item">
+            <span class="label">SCORE</span>
+            <span id="score">0</span>
+        </div>
+        <div class="hud-item">
+            <span class="label">BEST</span>
+            <span id="best">0</span>
+        </div>
+    </div>
+
+    <!-- Overlays -->
+    <div class="overlay" id="startScreen">
+        <h1>🐍 3D SNAKE</h1>
+        <p class="hint">Gamit ang <b>ARROW KEYS / WASD</b><br />o <b>SWIPE</b> sa mobile</p>
+        <button id="startBtn">START GAME</button>
+    </div>
+
+    <div class="overlay hidden" id="gameOverScreen">
+        <h1>GAME OVER 💀</h1>
+        <p>Score: <span id="finalScore">0</span></p>
+        <p>Best: <span id="finalBest">0</span></p>
+        <button id="restartBtn">PLAY AGAIN</button>
+    </div>
+
+    <!-- Mobile D-Pad (optional) -->
+    <div class="dpad" id="dpad">
+        <button class="dpad-btn up" data-dir="up">▲</button>
+        <button class="dpad-btn left" data-dir="left">◀</button>
+        <button class="dpad-btn right" data-dir="right">▶</button>
+        <button class="dpad-btn down" data-dir="down">▼</button>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
