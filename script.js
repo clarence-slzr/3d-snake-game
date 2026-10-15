@@ -1,16 +1,17 @@
 // ============================================
 //  🐍 3D SNAKE GAME - Three.js
+//  Full responsive + cursor control
 // ============================================
 
 // ---- Config ----
-const GRID_SIZE = 15;        // 15x15 grid
-const CELL_SIZE = 1;         // world units per cell
-const SPEED_MS = 200;        // movement interval (ms)
+const GRID_SIZE = 15;
+const CELL_SIZE = 1;
+const SPEED_MS = 200;
 const HALF = (GRID_SIZE * CELL_SIZE) / 2;
 
 // ---- State ----
 let scene, camera, renderer;
-let snake = [];              // array of {x, z}
+let snake = [];
 let direction = { x: 1, z: 0 };
 let nextDirection = { x: 1, z: 0 };
 let food = { x: 0, z: 0 };
@@ -18,12 +19,15 @@ let score = 0;
 let best = parseInt(localStorage.getItem('snake3d_best') || '0');
 let running = false;
 let gameLoop = null;
-let snakeGroup;              // group holding all snake meshes
+let snakeGroup;
 let foodMesh;
-
-// Materials (reused)
 let snakeMat, headMat, foodMat;
-let gridGroup;
+
+// Cursor control state
+let cursorTarget = null;       // world position ng mouse/touch
+let cursorPlane = null;        // invisible plane for raycasting
+let raycaster = null;
+let pointerActive = false;
 
 // ---- DOM ----
 const scoreEl = document.getElementById('score');
@@ -45,12 +49,10 @@ function initThree() {
     scene.background = new THREE.Color(0x0a0e27);
     scene.fog = new THREE.Fog(0x0a0e27, 20, 45);
 
-    // Camera (isometric-ish, tilt down)
     const aspect = window.innerWidth / window.innerHeight;
     camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 200);
     updateCamera();
 
-    // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -59,8 +61,7 @@ function initThree() {
     document.body.appendChild(renderer.domElement);
 
     // Lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambient);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1);
     dirLight.position.set(10, 20, 10);
@@ -102,7 +103,7 @@ function initThree() {
         metalness: 0.5,
     });
 
-    // Ground plane
+    // Ground
     const groundGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE + 4, GRID_SIZE * CELL_SIZE + 4);
     const groundMat = new THREE.MeshStandardMaterial({
         color: 0x111633,
@@ -115,8 +116,7 @@ function initThree() {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Grid lines
-    gridGroup = new THREE.Group();
+    // Grid
     const gridMat = new THREE.LineBasicMaterial({ color: 0x00ffc8, opacity: 0.25, transparent: true });
     for (let i = 0; i <= GRID_SIZE; i++) {
         const p = -HALF + i * CELL_SIZE;
@@ -128,19 +128,17 @@ function initThree() {
             new THREE.Vector3(-HALF, -0.49, p),
             new THREE.Vector3(HALF, -0.49, p),
         ]);
-        gridGroup.add(new THREE.Line(g1, gridMat));
-        gridGroup.add(new THREE.Line(g2, gridMat));
+        scene.add(new THREE.Line(g1, gridMat));
+        scene.add(new THREE.Line(g2, gridMat));
     }
-    scene.add(gridGroup);
 
-    // Border walls (glowing)
+    // Border walls
     const wallMat = new THREE.MeshStandardMaterial({
         color: 0x00ffc8,
         emissive: 0x00ffc8,
         emissiveIntensity: 1.5,
     });
-    const wallH = 0.4;
-    const wallT = 0.15;
+    const wallH = 0.4, wallT = 0.15;
     const size = GRID_SIZE * CELL_SIZE;
     const walls = [
         { geo: new THREE.BoxGeometry(size + wallT * 2, wallH, wallT), pos: [0, 0, HALF] },
@@ -158,16 +156,17 @@ function initThree() {
     snakeGroup = new THREE.Group();
     scene.add(snakeGroup);
 
-    // Food mesh
+    // Food
     const foodGeo = new THREE.IcosahedronGeometry(0.4, 0);
     foodMesh = new THREE.Mesh(foodGeo, foodMat);
     foodMesh.castShadow = true;
     scene.add(foodMesh);
 
-    // Resize handler
-    window.addEventListener('resize', onResize);
+    // Raycaster setup for cursor control
+    raycaster = new THREE.Raycaster();
+    cursorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0 plane
 
-    // Animation loop
+    window.addEventListener('resize', onResize);
     animate();
 }
 
@@ -175,11 +174,15 @@ function updateCamera() {
     const aspect = window.innerWidth / window.innerHeight;
     camera.aspect = aspect;
 
-    // Responsive camera distance (para kasya yung buong board kahit maliit screen)
-    const dist = aspect < 1 ? 26 : 22;
+    // Responsive distance — mas malayo sa mobile para kasya yung buong board
+    let dist;
+    if (aspect < 0.6) dist = 30;   // portrait phone
+    else if (aspect < 1) dist = 26;   // small tablets
+    else if (aspect < 1.5) dist = 22;   // square
+    else dist = 20;   // landscape desktop
+
     camera.position.set(dist * 0.7, dist * 0.9, dist * 0.7);
     camera.lookAt(0, 0, 0);
-
     camera.updateProjectionMatrix();
 }
 
@@ -199,8 +202,14 @@ function gridToWorld(gx, gz) {
     };
 }
 
+function worldToGrid(wx, wz) {
+    return {
+        x: Math.floor((wx + HALF) / CELL_SIZE),
+        z: Math.floor((wz + HALF) / CELL_SIZE),
+    };
+}
+
 function startGame() {
-    // Reset state
     snake = [
         { x: 7, z: 7 },
         { x: 6, z: 7 },
@@ -227,10 +236,31 @@ function startGame() {
 function tick() {
     if (!running) return;
 
-    // Apply buffered direction
+    // Cursor control: kung may pointer target, i-set direction papunta doon
+    if (pointerActive && cursorTarget) {
+        const head = snake[0];
+        const headWorld = gridToWorld(head.x, head.z);
+        const dx = cursorTarget.x - headWorld.x;
+        const dz = cursorTarget.z - headWorld.z;
+        const absX = Math.abs(dx), absZ = Math.abs(dz);
+
+        // Piliin yung dominant axis
+        if (absX > 0.3 || absZ > 0.3) {
+            let newDir;
+            if (absX > absZ) {
+                newDir = { x: dx > 0 ? 1 : -1, z: 0 };
+            } else {
+                newDir = { x: 0, z: dz > 0 ? 1 : -1 };
+            }
+            // Bawal reverse
+            if (!(newDir.x === -direction.x && newDir.z === -direction.z)) {
+                nextDirection = newDir;
+            }
+        }
+    }
+
     direction = nextDirection;
 
-    // Compute new head
     const head = snake[0];
     const newHead = { x: head.x + direction.x, z: head.z + direction.z };
 
@@ -239,7 +269,7 @@ function tick() {
         return endGame();
     }
 
-    // Self collision (ignore tail since it will move)
+    // Self collision
     for (let i = 0; i < snake.length - 1; i++) {
         if (snake[i].x === newHead.x && snake[i].z === newHead.z) {
             return endGame();
@@ -248,7 +278,6 @@ function tick() {
 
     snake.unshift(newHead);
 
-    // Ate food?
     if (newHead.x === food.x && newHead.z === food.z) {
         score++;
         scoreEl.textContent = score;
@@ -278,7 +307,6 @@ function spawnFood() {
 }
 
 function rebuildSnake() {
-    // Clear old meshes
     while (snakeGroup.children.length) {
         const c = snakeGroup.children.pop();
         c.geometry.dispose();
@@ -290,14 +318,12 @@ function rebuildSnake() {
             ? new THREE.BoxGeometry(0.85, 0.85, 0.85)
             : new THREE.BoxGeometry(0.75, 0.75, 0.75);
 
-        // Rounded look (bevel via scale + extra sphere on top?) — keep simple but shiny
         const mesh = new THREE.Mesh(geo, isHead ? headMat : snakeMat);
         const pos = gridToWorld(seg.x, seg.z);
         mesh.position.set(pos.x, 0, pos.z);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
-        // Slight scale-down for tail taper
         const taper = 1 - (i / (snake.length * 2.5));
         mesh.scale.setScalar(Math.max(0.6, taper));
 
@@ -306,7 +332,6 @@ function rebuildSnake() {
 }
 
 function pulseFood() {
-    // simple bounce effect
     foodMesh.scale.set(1.5, 1.5, 1.5);
 }
 
@@ -340,9 +365,9 @@ function setDirection(dir) {
     };
     const d = map[dir];
     if (!d) return;
-    // Prevent 180° reverse
     if (d.x === -direction.x && d.z === -direction.z) return;
     nextDirection = d;
+    pointerActive = false; // keyboard override
 }
 
 // Keyboard
@@ -355,38 +380,65 @@ document.addEventListener('keydown', (e) => {
     if (k === ' ' && !running) startGame();
 });
 
+// ---- CURSOR CONTROL (Desktop) ----
+function updateCursorTarget(clientX, clientY) {
+    if (!raycaster || !camera) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, camera);
+    const point = new THREE.Vector3();
+    const hit = raycaster.ray.intersectPlane(cursorPlane, point);
+    if (hit) {
+        cursorTarget = point;
+        pointerActive = true;
+    }
+}
+
+// Mouse move over canvas
+renderer_domReady();
+function renderer_domReady() {
+    // We need to attach after renderer is created — defer
+    setTimeout(() => {
+        if (!renderer) return;
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            if (running) updateCursorTarget(e.clientX, e.clientY);
+        });
+        renderer.domElement.addEventListener('mouseleave', () => {
+            pointerActive = false;
+            cursorTarget = null;
+        });
+    }, 100);
+}
+
+// Touch drag (for phones — pero may D-Pad naman, optional support)
+document.addEventListener('touchstart', (e) => {
+    if (!running) return;
+    // Kung D-Pad ang na-touch, wag i-update yung cursor
+    if (e.target.closest('.dpad')) return;
+    if (e.touches.length === 1) {
+        updateCursorTarget(e.touches[0].clientX, e.touches[0].clientY);
+    }
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+    if (!running) return;
+    if (e.target.closest('.dpad')) return;
+    if (e.touches.length === 1) {
+        updateCursorTarget(e.touches[0].clientX, e.touches[0].clientY);
+    }
+}, { passive: true });
+
 // D-Pad
 document.querySelectorAll('.dpad-btn').forEach(btn => {
     btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         setDirection(btn.dataset.dir);
     });
 });
-
-// Touch swipe
-let touchStart = null;
-document.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1) {
-        touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    }
-}, { passive: true });
-
-document.addEventListener('touchend', (e) => {
-    if (!touchStart) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStart.x;
-    const dy = t.clientY - touchStart.y;
-    const absX = Math.abs(dx), absY = Math.abs(dy);
-
-    if (Math.max(absX, absY) < 30) return; // ignore small taps
-
-    if (absX > absY) {
-        setDirection(dx > 0 ? 'right' : 'left');
-    } else {
-        setDirection(dy > 0 ? 'down' : 'up');
-    }
-    touchStart = null;
-}, { passive: true });
 
 // Buttons
 startBtn.addEventListener('click', startGame);
@@ -395,24 +447,18 @@ restartBtn.addEventListener('click', startGame);
 // ============================================
 //  ANIMATION LOOP
 // ============================================
-let clock = new THREE.Clock();
+const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const t = clock.getElapsedTime();
 
-    // Rotate & bob the food
     if (foodMesh) {
         foodMesh.rotation.y = t * 2;
         foodMesh.rotation.x = t * 1.5;
         const bob = Math.sin(t * 4) * 0.15 + 0.4;
         foodMesh.position.y = bob;
-        // Smoothly shrink back after pulse
         foodMesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.15);
     }
-
-    // Gently rotate camera sa maliit na angle for life
-    // (very subtle, para hindi nakakalito)
-    // camera.rotation.y = Math.sin(t * 0.2) * 0.05;
 
     renderer.render(scene, camera);
 }

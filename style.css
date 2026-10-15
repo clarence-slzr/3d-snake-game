@@ -15,6 +15,7 @@ body {
     color: white;
     user-select: none;
     touch-action: none;
+    position: fixed;
 }
 
 /* Canvas fills screen */
@@ -23,43 +24,47 @@ canvas {
     position: absolute;
     top: 0;
     left: 0;
+    cursor: crosshair;
 }
 
 /* HUD */
 .hud {
     position: fixed;
-    top: 15px;
+    top: 10px;
     left: 0;
     right: 0;
     display: flex;
     justify-content: space-around;
     pointer-events: none;
     z-index: 10;
-    padding: 0 15px;
+    padding: 0 10px;
+    gap: 10px;
 }
 
 .hud-item {
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 2px solid rgba(0, 255, 200, 0.5);
-    border-radius: 15px;
-    padding: 8px 20px;
+    border-radius: 12px;
+    padding: 6px 14px;
     display: flex;
     flex-direction: column;
     align-items: center;
     box-shadow: 0 0 20px rgba(0, 255, 200, 0.3);
-    min-width: 90px;
+    min-width: 80px;
+    flex: 0 0 auto;
 }
 
 .hud-item .label {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     letter-spacing: 2px;
     color: #00ffc8;
     font-weight: bold;
 }
 
 .hud-item span:last-child {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     font-weight: bold;
     color: #fff;
     text-shadow: 0 0 10px #00ffc8;
@@ -69,13 +74,14 @@ canvas {
 .overlay {
     position: fixed;
     inset: 0;
-    background: rgba(10, 14, 39, 0.9);
+    background: rgba(10, 14, 39, 0.92);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 18px;
+    gap: 16px;
     z-index: 20;
     padding: 20px;
     text-align: center;
@@ -87,7 +93,7 @@ canvas {
 }
 
 .overlay h1 {
-    font-size: clamp(1.8rem, 6vw, 3rem);
+    font-size: clamp(1.6rem, 6vw, 3rem);
     background: linear-gradient(90deg, #00ffc8, #00a8ff, #ff00e5);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -97,9 +103,10 @@ canvas {
 }
 
 .overlay p {
-    font-size: clamp(0.9rem, 3vw, 1.1rem);
+    font-size: clamp(0.85rem, 3vw, 1.1rem);
     color: #b8c5d6;
-    line-height: 1.6;
+    line-height: 1.7;
+    max-width: 90%;
 }
 
 .overlay p .hint b {
@@ -110,15 +117,16 @@ canvas {
     background: linear-gradient(135deg, #00ffc8, #00a8ff);
     color: #0a0e27;
     border: none;
-    padding: 15px 45px;
-    font-size: clamp(1rem, 3vw, 1.2rem);
+    padding: 14px 40px;
+    font-size: clamp(0.95rem, 3vw, 1.2rem);
     font-weight: bold;
     border-radius: 50px;
     cursor: pointer;
     letter-spacing: 2px;
     box-shadow: 0 0 30px rgba(0, 255, 200, 0.6), 0 8px 0 #007a5c;
     transition: all 0.1s;
-    margin-top: 10px;
+    margin-top: 8px;
+    touch-action: manipulation;
 }
 
 .overlay button:active {
@@ -129,31 +137,38 @@ canvas {
 /* Mobile D-Pad */
 .dpad {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    bottom: 15px;
+    right: 15px;
     width: 150px;
     height: 150px;
     display: none;
     z-index: 15;
+    touch-action: manipulation;
 }
 
 .dpad-btn {
     position: absolute;
     width: 48px;
     height: 48px;
-    background: rgba(0, 255, 200, 0.2);
+    background: rgba(0, 255, 200, 0.25);
     border: 2px solid #00ffc8;
     border-radius: 12px;
     color: #00ffc8;
     font-size: 1.1rem;
     cursor: pointer;
     backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     transition: all 0.1s;
+    touch-action: manipulation;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .dpad-btn:active {
-    background: rgba(0, 255, 200, 0.6);
+    background: rgba(0, 255, 200, 0.7);
     transform: scale(0.9);
+    color: #0a0e27;
 }
 
 .dpad-btn.up {
@@ -176,14 +191,104 @@ canvas {
     left: 51px;
 }
 
-/* Show D-Pad on touch devices */
+/* Cursor hint (desktop only) */
+.cursor-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    color: rgba(0, 255, 200, 0.6);
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    z-index: 10;
+    pointer-events: none;
+    display: none;
+}
+
+/* Show D-Pad + hint on touch devices */
 @media (hover: none) and (pointer: coarse) {
     .dpad {
         display: block;
     }
 
-    .overlay p .hint {
+    .cursor-hint {
         display: none;
+    }
+}
+
+/* Small screens: make D-Pad smaller */
+@media (max-width: 480px) {
+    .dpad {
+        width: 130px;
+        height: 130px;
+    }
+
+    .dpad-btn {
+        width: 42px;
+        height: 42px;
+        font-size: 1rem;
+    }
+
+    .dpad-btn.up {
+        top: 0;
+        left: 44px;
+    }
+
+    .dpad-btn.left {
+        top: 44px;
+        left: 0;
+    }
+
+    .dpad-btn.right {
+        top: 44px;
+        left: 88px;
+    }
+
+    .dpad-btn.down {
+        top: 88px;
+        left: 44px;
+    }
+
+    .hud-item {
+        padding: 5px 10px;
+        min-width: 70px;
+    }
+
+    .hud-item span:last-child {
+        font-size: 1.1rem;
+    }
+}
+
+/* Very small screens (iPhone SE) */
+@media (max-width: 380px) {
+    .dpad {
+        width: 110px;
+        height: 110px;
+    }
+
+    .dpad-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 0.9rem;
+    }
+
+    .dpad-btn.up {
+        top: 0;
+        left: 37px;
+    }
+
+    .dpad-btn.left {
+        top: 37px;
+        left: 0;
+    }
+
+    .dpad-btn.right {
+        top: 37px;
+        left: 74px;
+    }
+
+    .dpad-btn.down {
+        top: 74px;
+        left: 37px;
     }
 }
 
